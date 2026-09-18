@@ -306,6 +306,26 @@ body{
   display: block; font-style: normal; font-size: .62rem;
   letter-spacing: .26em; color: var(--orquidea); margin-bottom: .22rem;
 }
+.escena[data-escena="fotos"]{ gap: .8rem; }
+.desliza{
+  display: flex; align-items: center; gap: .6rem;
+  font-family: var(--display); font-weight: 500;
+  font-size: .72rem; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--tinta-suave);
+  transition: opacity .7s ease;
+}
+.desliza svg{
+  width: 30px; height: 14px; flex: 0 0 30px;
+  fill: none; stroke: var(--orquidea); stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round;
+  animation: empuja 2s ease-in-out infinite;
+}
+@keyframes empuja{
+  0%, 100%{ transform: translateX(4px); opacity: .4; }
+  50%     { transform: translateX(-4px); opacity: 1; }
+}
+.desliza.oculta{ opacity: 0; pointer-events: none; }
+
 #puntos{ display: flex; gap: 7px; justify-content: center; }
 #puntos i{
   width: 5px; height: 5px; border-radius: 50%;
@@ -407,6 +427,24 @@ body{
 }
 #posdata.viva{ opacity: 1; transform: none; }
 
+/* ---------- Volver ---------- */
+#atras{
+  position: fixed; z-index: 31;
+  left: calc(env(safe-area-inset-left, 0px) + 4px);
+  top: calc(env(safe-area-inset-top, 0px) + 24px);
+  width: 46px; height: 46px; padding: 0;
+  display: grid; place-items: center;
+  border: none; background: none; cursor: pointer;
+  color: var(--tinta-tenue); opacity: .5;
+  transition: opacity .35s ease, transform .2s ease;
+}
+#atras svg{
+  width: 16px; height: 16px; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+#atras:active{ opacity: 1; transform: translateX(-2px); }
+#atras:focus-visible{ outline: 2px solid var(--lacre); outline-offset: 2px; border-radius: 50%; }
+
 /* ---------- Audio opcional ---------- */
 #audioBtn{
   position: fixed; z-index: 35;
@@ -448,6 +486,9 @@ body{
 <svg class="flor ambiente b" aria-hidden="true"><use href="#orquidea"/></svg>
 <svg class="flor ambiente c" aria-hidden="true"><use href="#orquidea"/></svg>
 <div id="progreso" aria-hidden="true"></div>
+<button id="atras" type="button" aria-label="Volver al paso anterior" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20"/></svg>
+</button>
 <button id="audioBtn" type="button" aria-label="Música">♪</button>
 
 <main id="escenario">
@@ -485,7 +526,7 @@ body{
 
   <!-- 3 · PRIMERO AMIGOS -->
   <section class="escena tocable" data-escena="amistad" data-tap="1">
-    <p class="eyebrow">Primero</p>
+    <p class="eyebrow">La raíz</p>
     <h2 class="titular">Primero fuimos amigos</h2>
     <p class="parrafo">Nos conocimos a través de tantos años y tantas versiones de nosotros mismos. Y luego la vida nos dejó <em>reconocernos</em> de otra forma.</p>
     <p class="pista">Toca para seguir</p>
@@ -495,6 +536,10 @@ body{
   <section class="escena" data-escena="fotos">
     <p class="eyebrow">Nosotros, en orden</p>
     <div id="carrusel"></div>
+    <div class="desliza" id="desliza">
+      <svg viewBox="0 0 30 14" aria-hidden="true"><path d="M28 7 H4 M10 1 L4 7 L10 13"/></svg>
+      <span>Desliza las fotos</span>
+    </div>
     <div id="puntos"></div>
     <button class="boton" data-avanzar type="button">Seguir</button>
   </section>
@@ -586,6 +631,8 @@ const CONFIG = {
    ========================================================== */
 const escenas = Array.from(document.querySelectorAll(".escena"));
 const barraProgreso = document.getElementById("progreso");
+const btnAtras = document.getElementById("atras");
+const PRIMERA = 1;                    // la escena 0 (encendido) no se revisita
 let actual = -1;
 let bloqueado = false;
 
@@ -594,13 +641,25 @@ escenas.slice(1).forEach(() => barraProgreso.appendChild(document.createElement(
 function pintarProgreso(){
   barraProgreso.querySelectorAll("i").forEach((m, i) => m.classList.toggle("hecho", i < actual));
   barraProgreso.classList.toggle("visible", actual >= 1 && actual < escenas.length - 1);
+  btnAtras.hidden = actual <= PRIMERA;
 }
 
-function ir(indice){
-  if (bloqueado || indice === actual || indice >= escenas.length) return;
+function ir(indice, empujar){
+  if (bloqueado || indice === actual || indice < 0 || indice >= escenas.length) return;
   bloqueado = true;
   if (actual >= 0) escenas[actual].classList.remove("viva");
   const anterior = actual;
+
+  /* historial: el botón físico de Android retrocede un paso en vez de salir */
+  if (empujar !== false){
+    try {
+      // el primer salto (encendido -> sobre) reemplaza, para que "atrás" en el
+      // sobre sí cierre la página en lugar de volver a la pantalla de carga
+      const metodo = (indice === PRIMERA && anterior <= 0) ? "replaceState" : "pushState";
+      history[metodo]({ e: indice }, "");
+    } catch(_){}
+  }
+
   actual = indice;
   setTimeout(() => {
     escenas[actual].classList.add("viva");
@@ -609,12 +668,53 @@ function ir(indice){
     setTimeout(() => { bloqueado = false; }, 420);
   }, anterior >= 0 ? 520 : 60);
 }
-function siguiente(){ ir(actual + 1); }
 
-escenas.forEach(sec => { if (sec.dataset.tap === "1") sec.addEventListener("click", siguiente); });
+function siguiente(){ ir(actual + 1); }
+function atras(){ if (actual > PRIMERA) history.back(); }
+
+window.addEventListener("popstate", ev => {
+  const destino = Math.max(PRIMERA, (ev.state && typeof ev.state.e === "number") ? ev.state.e : PRIMERA);
+  if (destino === actual) return;
+  if (bloqueado) setTimeout(() => ir(destino, false), 460);
+  else ir(destino, false);
+});
+
+btnAtras.addEventListener("click", e => { e.stopPropagation(); atras(); });
+
+/* ---------- Gestos: izquierda avanza, derecha regresa ---------- */
+let tocoX = 0, tocoY = 0, dentroDelCarrusel = false, huboGesto = false;
+
+document.addEventListener("touchstart", e => {
+  const t = e.changedTouches[0];
+  tocoX = t.clientX; tocoY = t.clientY;
+  dentroDelCarrusel = !!(e.target.closest && e.target.closest("#carrusel"));
+  huboGesto = false;
+}, { passive: true });
+
+document.addEventListener("touchend", e => {
+  if (dentroDelCarrusel) return;              // el carrusel tiene su propio deslizar
+  const t = e.changedTouches[0];
+  const dx = t.clientX - tocoX;
+  const dy = t.clientY - tocoY;
+  if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5){
+    huboGesto = true;                          // evita que el toque cuente además como avance
+    if (dx > 0) atras(); else siguiente();
+    setTimeout(() => { huboGesto = false; }, 550);
+  }
+}, { passive: true });
+
+escenas.forEach(sec => {
+  if (sec.dataset.tap === "1") sec.addEventListener("click", () => { if (!huboGesto) siguiente(); });
+});
 document.querySelectorAll("[data-avanzar]").forEach(b =>
   b.addEventListener("click", e => { e.stopPropagation(); siguiente(); })
 );
+
+/* teclado, por si la abre en un computador */
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") atras();
+  if (e.key === "ArrowRight") siguiente();
+});
 
 /* ==========================================================
    CONTENIDO
@@ -663,10 +763,14 @@ CONFIG.fotos.forEach((f, i) => {
   puntos.appendChild(p);
 });
 
+const pistaDesliza = document.getElementById("desliza");
+
 carrusel.addEventListener("scroll", () => {
   const ancho = carrusel.scrollWidth / CONFIG.fotos.length;
   const idx = Math.round(carrusel.scrollLeft / ancho);
   puntos.querySelectorAll("i").forEach((p, i) => p.classList.toggle("activo", i === idx));
+  /* en cuanto ella desliza de verdad, la pista sobra */
+  if (idx > 0) pistaDesliza.classList.add("oculta");
 }, { passive: true });
 
 /* — Lo pequeño — */
@@ -700,9 +804,11 @@ hoja.appendChild(cerrar);
 const suave = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let cartaObservada = false;
 let carruselInsinuado = false;
+let encendidoHecho = false;
 
 function alEntrar(nombre){
-  if (nombre === "encendido"){
+  if (nombre === "encendido" && !encendidoHecho){
+    encendidoHecho = true;
     requestAnimationFrame(() => { document.querySelector("#barra b").style.width = "100%"; });
     setTimeout(siguiente, 3100);
   }
@@ -799,7 +905,8 @@ if (CONFIG.audio){
   }, { once: true });
 }
 
-ir(0);
+try { history.replaceState({ e: PRIMERA }, ""); } catch(_){}
+ir(0, false);
 </script>
 
 </body>
